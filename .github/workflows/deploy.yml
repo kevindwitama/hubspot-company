@@ -1,0 +1,47 @@
+name: Build and Deploy to Nomad
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/buildx-action@v3
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.staging
+          push: true
+          tags: ghcr.io/${{ github.repository }}:latest
+
+      - name: Setup Nomad CLI
+        uses: hashicorp/setup-nomad@v2
+        with:
+          version: "1.8.0"
+
+      - name: Deploy Job to Nomad
+        env:
+          NOMAD_ADDR: ${{ secrets.NOMAD_ADDR }}
+        run: |
+          nomad job run -var="github_repository=${{ github.repository }}" app.nomad.hcl
+
